@@ -4,6 +4,4 @@
 /.cask
 *loaddefs.el
 *.html 
-*autoloads.el  
-test.el  
-sml-capf.el
+*autoloads.el
