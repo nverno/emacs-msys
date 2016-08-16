@@ -1,0 +1,2 @@
+* TODO mark packages in ~pacman-mode~
+* TODO install marked packages

@@ -7,6 +7,8 @@ auto ?= emacs-msys-autoloads.el
 el = $(filter-out $(auto) .dir-locals.el,$(wildcard *.el))
 elc = $(el:.el=.elc)
 
+load= .
+
 batch_flags = -batch \
 	--eval "(let ((default-directory                   \
                       (expand-file-name \"$(elpa_dir)\"))) \
@@ -27,13 +29,13 @@ all: compile $(auto)
 
 compile : $(elc)
 %.elc : %.el
-	$(emacs) $(batch_flags) -f batch-byte-compile $<
+	$(emacs) $(batch_flags) -L $(load) -f batch-byte-compile $<
 
 $(auto):
 	$(emacs) -batch $(auto_flags)
 
-README.md: el2markdown.el $(el)
-	$(emacs) -batch -l $< $(el) -f el2markdown-write-readme
+README.md: el2markdown.el msys.el
+	$(emacs) -batch -l $< msys.el -f el2markdown-write-readme
 	$(RM) $@~
 
 .INTERMEDIATE: el2markdown.el
