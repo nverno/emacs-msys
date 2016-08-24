@@ -27,18 +27,23 @@
 
 ;; Some utilities to open msys2 shells and install packages/interact with
 ;; pacman from Emacs.
-
-;; Opens buffer in `pacman-mode' when searching packages, a mode to help
-;; manage packages.
-
+;;
+;; The main entry point is `msys-pacman', which calls pacman to search or install
+;; packages.  When searching, the results are displayed in `pacman-mode'.  
+;; 
 ;;; Pacman mode:
 
-;;  Provides emacs major mode to interact with pacman results.
+;;  Provides emacs major mode to select and install packages from pacman
+;;  package manager using a `tree-widget' format to have nodes for
+;;  packages available under msys, mingw32, or mingw64 nodes.
 
 ;;  Some features:
-;;  - font-locking for msys/mingw32/mingw64 and installed packages
-;;  - narrowing to msys/mingw32/mingw64 package results
-;;  - marking packages to install
+;;  - Toggle msys/mingw32/mingw64 package results
+;;  - Mark and install packages
+;;  - Font-locking for msys/mingw32/mingw64 and installed packages
+;;
+;; ![example](example.png)
+;;
 
 ;;; Code:
 (autoload 'pacman-mode "pacman-mode")
@@ -115,7 +120,7 @@ shell, typing '?' in the minibuffer is temporarily bound to display options."
 (defvar msys-pacman-package-buffer "*Pacman Packages*")
 
 ;;;###autoload
-(defun msys-pacman (&optional arg)
+(defun msys-pacman (&optional arg command)
   "Interface to msys2 pacman.  With prefix install packages, otherwise search
 'pacman -Ss'.  Results are shown in buffer when pacman finishes doing its stuff."
   (interactive "p")
@@ -124,8 +129,9 @@ shell, typing '?' in the minibuffer is temporarily bound to display options."
          (buffer (if installing msys-pacman-install-buffer
                    msys-pacman-package-buffer))
          (cmd (concat default " "
-                      (read-shell-command
-                       (format "%s: " default))))
+                      (or command
+                          (read-shell-command
+                           (format "%s: " default)))))
          (buff (prog1 (get-buffer-create buffer)
                  (with-current-buffer buffer
                    (let ((inhibit-read-only t))

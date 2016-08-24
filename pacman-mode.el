@@ -10,6 +10,7 @@
   (require 'easymenu)
   (require 'cl-lib))
 (require 'tree-widget)
+(require 'msys)
 (autoload 'occur "replace")
 
 (defgroup pacman nil
@@ -32,8 +33,6 @@
   "Ming64 package face."
   :group 'pacman)
 
-(defvar pacman-package-buffer "*Pacman Packages*")
-
 
 ;; ------------------------------------------------------------
 ;;* Internal
@@ -50,21 +49,20 @@
     (while (re-search-forward
             (eval-when-compile
               (concat (regexp-opt '("msys" "mingw32" "mingw64") t)
-                      "/\\([^ ]+\\) \\([^ ]+\\)\\(installed\\)?\n\\s-*"
+                      "/\\([^ ]+\\) \\([^ ]+\\)\\s-*\\(\\\[installed\\\]\\)?\n\\s-*"
                       "\\(.*\\)"))
             nil t)
       (push (pacman--make-pkg
              :type (match-string-no-properties 1)
              :name (match-string-no-properties 2)
-             :version (match-string-no-properties 3)
-             :installed (match-string-no-properties 4)
+             :version (or (match-string-no-properties 3) "")
+             :installed (or (match-string-no-properties 4) "")
              :description (match-string-no-properties 5))
             pkgs))
     pkgs))
 
 
 ;;* Package widgets
-;; based off recentf.el `recentf-dialog-mode'
 
 (defvar-local pacman-selected-packages nil)
 
@@ -77,7 +75,7 @@
 
 (defun pacman-package-select (widget &rest _ignore)
   "Select a package based on the checkbox WIDGET state."
-  (let ((value (widget-get widget :tag))
+  (let ((value (widget-get widget :package))
         (check (widget-value widget)))
     (if check
         (add-to-list 'pacman-selected-packages value)
@@ -87,23 +85,37 @@
 (defun pacman-package-list ()
   "Setup pacman package listing."
   (pacman-mode-dialog (current-buffer)
-    (set (make-local-variable 'pacman-packages) (pacman-get-packages))
+    ;; (set (make-local-variable 'pacman-packages) (pacman-get-packages))
     (set (make-local-variable 'pacman-selected-packages) nil)
+    (setq-local inhibit-read-only t)
+    (setq-local widget-field-add-space nil)
     (erase-buffer)
     (widget-insert
-     "Click on OK to select package to install. 
-Click on Cancel or type `q' to cancel.\n")
+     "Click on Install or type `i' to install selected packages. 
+Click on Cancel or type `q' to cancel.\n\n")
+    
     ;; Insert packages as checkboxes
-    (dolist (item pacman-packages)
-       (widget-create 'checkbox
-                     :value nil
-                     :format "\n %[%v%]  %t"
-                     :tag (format "(%s)%s %s %s"
-                                  (pacman--pkg-type item)
-                                  (pacman--pkg-name item)
-                                  (pacman--pkg-version item)
-                                  (pacman--pkg-installed item))
-                     :notify 'pacman-package-select))
+    (dolist (type '("msys" "mingw32" "mingw64"))
+      (widget-create
+       'tree-widget
+       :open t
+       :tag type
+       :args
+       (cl-loop for item in pacman-packages
+          when (string= (pacman--pkg-type item) type)
+          collect (widget-convert
+                   'checkbox
+                   :parent type
+                   :value nil
+                   :format " %{%v%} %t\n    %d"
+                   :tag (format "%s %s %s"
+                                (pacman--pkg-name item)
+                                (pacman--pkg-version item)
+                                (pacman--pkg-installed item))
+                   :doc (pacman--pkg-description item)
+                   :package (pacman--pkg-name item)
+                   :notify 'pacman-package-select))))
+    
     (widget-insert "\n\n")
     (widget-create
      'push-button
@@ -116,66 +128,23 @@ Click on Cancel or type `q' to cancel.\n")
      :notify 'pacman-cancel
      "Cancel")))
 
-(defun pacman-print-packages ()
-  (interactive)
-  (when pacman-selected-packages
-   (dolist (item pacman-selected-packages)
-     (prin1 item))))
-
-;; (defun pacman-get-sections ()
-;;   "Sections corresponding to 'msys', 'mingw32', and 'mingw64'."
-;;   (widen)
-;;   (setq pacman-sections
-;;         (cl-loop for patt in '("mingw32/" "mingw64/" "msys/")
-;;            collect (and (goto-char (point-min))
-;;                         (re-search-forward (regexp-quote patt) nil t)
-;;                         (cons patt (match-beginning 0))))))
-
 
 ;; ------------------------------------------------------------
 ;;* User Interface
 
-(defun pacman-narrow-matching (arg)
-  (interactive
-   (list (ido-completing-read "Only show packages for: "
-                              '("msys" "mingw32" "mingw64"))))
-  (let* ((sections (or pacman-sections (pacman-get-sections)))
-         (inds (mapcar 'cdr sections))
-         (start (cdr (assoc-string (concat arg "/") sections)))
-         (end (and start
-                   (or (cadr (memq start inds))
-                       (point-max)))))
-    (narrow-to-region start end)))
-
-(defun pacman-toggle-narrow ()
-  "Toggle narrowing to region."
-  (interactive)
-  (if (buffer-narrowed-p)
-      (progn
-        (widen)
-        (goto-char (point-min)))
-    (call-interactively 'pacman-narrow-matching)))
-
-(defun pacman-occur ()
+(defun pacman-installed ()
+  "Occur the installed packages in buffer."
   (interactive)
   (occur "\\(installed\\)"))
-
-;; @@TODO: add marks, alist with line number to retrieve packages from
-;; 'packman-packages' alist
-(defun pacman-mark ()
-  "Mark package."
-  (interactive))
-
-(defun pacman-installed ()
-  "Show installed packages only."
-  (interactive))
 
 (defun pacman-install (&rest _ignore)
   "Install selected packages."
   (interactive)
   (if pacman-selected-packages
-      (dolist (pkg pacman-selected-packages)
-        (prin1 (pacman--pkg-name pkg)))
+      (progn
+        (msys-pacman 4 (mapconcat 'identity pacman-selected-packages " "))
+        (pacman-cancel)
+        (pop-to-buffer msys-pacman-install-buffer))
     (message "No packages selected for installation.")))
 
 (defun pacman-cancel (&rest _ignore)
@@ -188,25 +157,31 @@ Click on Cancel or type `q' to cancel.\n")
 ;; ------------------------------------------------------------
 ;;* Mode
 
-(defvar pacman-font-lock
-  '(("\\(msys/\\)\\([^ ]+\\)"
+(defvar pacman-font-lock-vars
+  '(("\\(msys\\)\)?\\s-*\\([^ ]+\\)"
      (1 'pacman-msys-face)
      (2 font-lock-constant-face))
-    ("\\(mingw32/\\)\\([^ ]+\\)"
+    ("\\(mingw32\\)\)?\\s-*\\([^ ]+\\)"
      (1 'pacman-mingw32-face)
      (2 font-lock-constant-face))
-    ("\\(mingw64/\\)\\([^ ]+\\)"
+    ("\\(mingw64\\)\)?\\s-*\\([^ ]+\\)"
      (1 'pacman-mingw64-face)
      (2 font-lock-constant-face))
     ("\\[\\(installed\\)\\]" . 'msys-installed-face)))
 
+(defun pacman-font-lock (packages)
+  (let ((pkgs (regexp-opt (mapcar 'pacman--pkg-name packages)))
+        (ver (regexp-opt (mapcar 'pacman--pkg-version packages))))
+    (append
+     pacman-font-lock-vars
+     `((,pkgs . font-lock-builtin-face)
+       (,ver . font-lock-constant-face)))))
+
 (defvar pacman-menu
   '("Pacman"
-    ;; ["Mark package" pacman-mark :help "Mark package"]
     ["Install" pacman-install :help "Install selected packages"]
-    ;; ["Narrow region" pacman-narrow :help "Show only packages for msys/w32/w64"]
-    ["Show installed" pacman-installed :help "Show only installed packages"]
-    ["Occur installed" pacman-occur :help "Occur installed packages"]))
+    ["Show installed (Occur)" pacman-installed :help "Occur installed packages"]
+    ["Cancel" pacman-cancel]))
 
 (defvar pacman-mode-map
   (let ((km (make-sparse-keymap)))
@@ -214,9 +189,8 @@ Click on Cancel or type `q' to cancel.\n")
     (easy-menu-define nil km nil pacman-menu)
     (define-key km "n" 'next-line)
     (define-key km "p" 'previous-line)
-    (define-key km (kbd "C-i") 'pacman-installed)
     (define-key km "i" 'pacman-install)
-    (define-key km "o" 'pacman-occur)
+    (define-key km "o" 'pacman-installed)
     (define-key km "q" 'pacman-cancel)
     km)
   "Keymap for pacman mode.")
@@ -228,9 +202,10 @@ Commands:
 \\{pacman-mode-map}"
   :syntax-table nil
   :abbrev-table nil
+  (set (make-local-variable 'pacman-packages) (pacman-get-packages))
   (setq truncate-lines t)
-  ;; (setq-local font-lock-defaults '(pacman-font-lock nil nil nil nil))
-  )
+  (setq-local font-lock-defaults
+              `(,(pacman-font-lock pacman-packages) nil nil nil nil)))
 
 (provide 'pacman-mode)
 
