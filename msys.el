@@ -46,7 +46,7 @@
 ;;
 
 ;;; Code:
-(autoload 'pacman-mode "pacman-mode")
+(autoload 'pacman-package-list "pacman-mode")
 
 (defgroup msys nil
   "Interact with msys/pacman from emacs."
