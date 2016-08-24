@@ -18,6 +18,11 @@
   :group 'msys :group 'external
   :prefix "pacman-")
 
+(defcustom pacman-default-nodes-expanded '("msys" "mingw64")
+  "Nodes listed here will be expanded by default in the 
+packages buffer."
+  :group 'pacman)
+
 (defface pacman-msys-face
   '((t (:background "pink" :foreground "#504945" :weight bold)))
   "Msys package face."
@@ -41,7 +46,7 @@
 (cl-defstruct (pacman--pkg (:constructor pacman--make-pkg))
   type name version installed description)
 
-(defvar-local pacman-packages nil)
+(defvar pacman-packages nil)
 
 (defun pacman-get-packages ()
   (let (pkgs)
@@ -71,7 +76,42 @@
   `(progn
      (pacman-mode)
      ,@forms
-     (widget-setup)))
+     (widget-setup)
+     (goto-char (point-min))
+     (condition-case nil
+         (widget-forward 1)
+       (error (goto-char (point-min))))
+     ;; (pacman-package-goto-first 'tree-widget)
+     ))
+
+;; (defun pacman-package-tree-nodes ()
+;;   "Get list of tree nodes."
+;;   (save-excursion
+;;     (goto-char (point-min))
+;;     (let (res)
+;;       (condition-case nil
+;;           (progn
+;;             (widget-move 1)
+;;             (when (widget-type-match (widget-at (point))
+;;                                      :tree-widget-open-icon)
+;;               (push ))
+;;             )
+;;         ))))
+
+(defun pacman-package-expand-all ()
+  "Expand all tree nodes, exposing all children."
+  )
+
+(defun pacman-package-goto-first (widget-type)
+  "Move cursor to the first WIDGET-TYPE."
+  (goto-char (point-min))
+  (condition-case nil
+      (let (done)
+        (widget-move 1)
+        (while (not done)
+          (if eq widget-type (widget-type (widget-at (point)))
+              (setq done t))))
+    (error (goto-char (point-min)))))
 
 (defun pacman-package-select (widget &rest _ignore)
   "Select a package based on the checkbox WIDGET state."
@@ -79,15 +119,15 @@
         (check (widget-value widget)))
     (if check
         (add-to-list 'pacman-selected-packages value)
-      (setq pacman-selected-packages (delq value pacman-selected-packages)))
+      (setq pacman-selected-packages
+            (delq value pacman-selected-packages)))
     (message "%s %sselected" value (if check "" "un"))))
 
 (defun pacman-package-list ()
   "Setup pacman package listing."
   (pacman-mode-dialog (current-buffer)
-    ;; (set (make-local-variable 'pacman-packages) (pacman-get-packages))
     (set (make-local-variable 'pacman-selected-packages) nil)
-    (setq-local inhibit-read-only t)
+    ;; (setq-local inhibit-read-only t)
     (setq-local widget-field-add-space nil)
     (erase-buffer)
     (widget-insert
@@ -98,7 +138,7 @@ Click on Cancel or type `q' to cancel.\n\n")
     (dolist (type '("msys" "mingw32" "mingw64"))
       (widget-create
        'tree-widget
-       :open t
+       :open (member type pacman-default-nodes-expanded)
        :tag type
        :args
        (cl-loop for item in pacman-packages

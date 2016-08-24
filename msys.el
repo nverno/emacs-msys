@@ -150,9 +150,10 @@ shell, typing '?' in the minibuffer is temporarily bound to display options."
   (pop-to-buffer (if msys-pacman-installing msys-pacman-install-buffer
                    msys-pacman-package-buffer))
   (if msys-pacman-installing
-      (view-mode)
+      (progn (view-mode) (goto-char (point-min)))
     (pacman-package-list))
-  (goto-char (point-min)))
+  ;; (goto-char (point-min))
+  )
 
 (provide 'msys)
 
