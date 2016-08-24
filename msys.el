@@ -111,35 +111,41 @@ shell, typing '?' in the minibuffer is temporarily bound to display options."
 ;; ------------------------------------------------------------
 ;;* Pacman
 (defvar msys-pacman-installing nil)
-(defvar msys-pacman-output-buffer "*Msys2 Pacman Output*")
+(defvar msys-pacman-install-buffer "*Msys2 Pacman Output*")
+(defvar msys-pacman-package-buffer "*Pacman Packages*")
 
 ;;;###autoload
 (defun msys-pacman (&optional arg)
   "Interface to msys2 pacman.  With prefix install packages, otherwise search
 'pacman -Ss'.  Results are shown in buffer when pacman finishes doing its stuff."
   (interactive "p")
-  (let* ((default (if (> arg 1) msys-pacman-install-command "pacman -Ss"))
+  (let* ((installing (> arg 1))
+         (default (if installing msys-pacman-install-command "pacman -Ss"))
+         (buffer (if installing msys-pacman-install-buffer
+                   msys-pacman-package-buffer))
          (cmd (concat default " "
                       (read-shell-command
                        (format "%s: " default))))
-         (buff (and (get-buffer-create msys-pacman-output-buffer)
-                    (with-current-buffer msys-pacman-output-buffer
-                      (let (buffer-read-only) (erase-buffer)))))
+         (buff (prog1 (get-buffer-create buffer)
+                 (with-current-buffer buffer
+                   (let ((inhibit-read-only t))
+                     (erase-buffer)))))
          (proc (start-process
                 "pacman"
-                 msys-pacman-output-buffer
+                buffer
                 (expand-file-name "usr/bin/sh.exe" msys-directory)
                 "-l" "-c" cmd)))
     (message "Running %s..." cmd)
-    (setq msys-pacman-installing (> arg 1))
+    (setq msys-pacman-installing installing)
     (set-process-sentinel proc #'msys-pacman-sentinel)))
 
 (defun msys-pacman-sentinel (p s)
   (message "Process %s finished with status: '%s'" p s)
-  (pop-to-buffer msys-pacman-output-buffer)
+  (pop-to-buffer (if msys-pacman-installing msys-pacman-install-buffer
+                   msys-pacman-package-buffer))
   (if msys-pacman-installing
       (view-mode)
-    (pacman-mode))
+    (pacman-package-list))
   (goto-char (point-min)))
 
 (provide 'msys)
