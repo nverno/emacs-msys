@@ -118,6 +118,7 @@ shell, typing '?' in the minibuffer is temporarily bound to display options."
 (defvar msys-pacman-installing nil)
 (defvar msys-pacman-install-buffer "*Msys2 Pacman Output*")
 (defvar msys-pacman-package-buffer "*Pacman Packages*")
+(defvar msys-previous-query nil)
 
 ;;;###autoload
 (defun msys-pacman (&optional arg command)
@@ -133,6 +134,7 @@ shell, typing '?' in the minibuffer is temporarily bound to display options."
          (buff (prog1 (get-buffer-create buffer)
                  (with-current-buffer buffer
                    (let ((inhibit-read-only t))
+                     (kill-all-local-variables)
                      (erase-buffer)))))
          (proc (start-process
                 "pacman"
@@ -140,6 +142,7 @@ shell, typing '?' in the minibuffer is temporarily bound to display options."
                 (expand-file-name "usr/bin/sh.exe" msys-directory)
                 "-l" "-c" cmd)))
     (message "Running: %s" cmd)
+    (setq msys-previous-query cmd)
     (setq msys-pacman-installing installing)
     (set-process-sentinel proc #'msys-pacman-sentinel)))
 

@@ -42,12 +42,13 @@ packages buffer."
 ;; ------------------------------------------------------------
 ;;* Internal
 
+(defvar pacman-packages nil)
+(defvar pacman-selected-packages nil)
+
 ;; structure to store packages
 (cl-defstruct (pacman--pkg (:constructor pacman--make-pkg))
   type name version group installed description)
 
-(defvar pacman-packages nil)
-(defvar pacman-selected-packages nil)
 (defun pacman-get-packages ()
   (let (pkgs)
     (goto-char (point-min))
@@ -199,6 +200,11 @@ Click on Cancel or type `q' to cancel.\n\n")
                         (mapconcat 'identity pacman-selected-packages " ")))
         (pop-to-buffer msys-pacman-install-buffer))))
 
+(defun pacman-revert (&rest _ignored)
+  "`revert-buffer-function' for `pacman-mode'."
+  (interactive)
+  (msys-pacman 1 msys-previous-query))
+
 (defun pacman-cancel (&rest _ignore)
   "Kill the pacman buffer."
   (interactive)
@@ -235,6 +241,7 @@ Click on Cancel or type `q' to cancel.\n\n")
     ["Install" pacman-install :help "Install selected packages"]
     ["Upgrade" pacman-upgrade]
     ["Show installed (Occur)" pacman-installed :help "Occur installed packages"]
+    ["Update Buffer" pacman-revert]
     ["Cancel" pacman-cancel]))
 
 (defvar pacman-mode-map
@@ -247,6 +254,7 @@ Click on Cancel or type `q' to cancel.\n\n")
     (define-key km "o" 'pacman-installed)
     (define-key km "q" 'pacman-cancel)
     (define-key km "u" 'pacman-upgrade)
+    (define-key km "g" 'pacman-revert)
     km)
   "Keymap for pacman mode.")
 
@@ -257,7 +265,8 @@ Commands:
 \\{pacman-mode-map}"
   :syntax-table nil
   :abbrev-table nil
-  (setq-local pacman-packages (pacman-get-packages))
+  (setq pacman-packages (pacman-get-packages))
+  (setq revert-buffer-function #'pacman-revert)
   (setq truncate-lines t)
   (setq-local font-lock-defaults
               `(,(pacman-font-lock pacman-packages) nil nil nil nil)))
