@@ -128,10 +128,8 @@ shell, typing '?' in the minibuffer is temporarily bound to display options."
          (default (if installing msys-pacman-install-command "pacman -Ss"))
          (buffer (if installing msys-pacman-install-buffer
                    msys-pacman-package-buffer))
-         (cmd (concat default " "
-                      (or command
-                          (read-shell-command
-                           (format "%s: " default)))))
+         (cmd (or command
+                  (concat default " " (read-shell-command (format "%s: " default)))))
          (buff (prog1 (get-buffer-create buffer)
                  (with-current-buffer buffer
                    (let ((inhibit-read-only t))
@@ -141,19 +139,19 @@ shell, typing '?' in the minibuffer is temporarily bound to display options."
                 buffer
                 (expand-file-name "usr/bin/sh.exe" msys-directory)
                 "-l" "-c" cmd)))
-    (message "Running %s..." cmd)
+    (message "Running: %s" cmd)
     (setq msys-pacman-installing installing)
     (set-process-sentinel proc #'msys-pacman-sentinel)))
 
 (defun msys-pacman-sentinel (p s)
-  (message "Process %s finished with status: '%s'" p s)
+  (message "Process %s finished with status: '%s'"
+           p (replace-regexp-in-string "\n" "" s))
   (pop-to-buffer (if msys-pacman-installing msys-pacman-install-buffer
                    msys-pacman-package-buffer))
   (if msys-pacman-installing
       (progn (view-mode) (goto-char (point-min)))
-    (pacman-package-list))
-  ;; (goto-char (point-min))
-  )
+    (pacman-mode)
+    (pacman-package-list)))
 
 (provide 'msys)
 

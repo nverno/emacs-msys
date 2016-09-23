@@ -44,32 +44,33 @@ packages buffer."
 
 ;; structure to store packages
 (cl-defstruct (pacman--pkg (:constructor pacman--make-pkg))
-  type name version installed description)
+  type name version group installed description)
 
 (defvar pacman-packages nil)
-
+(defvar pacman-selected-packages nil)
 (defun pacman-get-packages ()
   (let (pkgs)
     (goto-char (point-min))
     (while (re-search-forward
             (eval-when-compile
               (concat (regexp-opt '("msys" "mingw32" "mingw64") t)
-                      "/\\([^ ]+\\) \\([^ ]+\\)\\s-*\\(\\\[installed\\\]\\)?\n\\s-*"
+                      "/\\([^ ]+\\) \\([^ ]+\\)\\s-*"
+                      "\\(\(.*\)\\)?\\s-*"
+                      "\\(\\\[installed.*\\\]\\)?\n\\s-*"
                       "\\(.*\\)"))
             nil t)
       (push (pacman--make-pkg
              :type (match-string-no-properties 1)
              :name (match-string-no-properties 2)
              :version (or (match-string-no-properties 3) "")
-             :installed (or (match-string-no-properties 4) "")
-             :description (match-string-no-properties 5))
+             :group (or (match-string-no-properties 4) "")
+             :installed (or (match-string-no-properties 5) "")
+             :description (match-string-no-properties 6))
             pkgs))
     pkgs))
 
 
 ;;* Package widgets
-
-(defvar-local pacman-selected-packages nil)
 
 (defmacro pacman-mode-dialog (&rest forms)
   (declare (indent 1) (debug t))
@@ -109,7 +110,7 @@ packages buffer."
       (let (done)
         (widget-move 1)
         (while (not done)
-          (if eq widget-type (widget-type (widget-at (point)))
+          (if (eq widget-type (widget-type (widget-at (point))))
               (setq done t))))
     (error (goto-char (point-min)))))
 
@@ -126,7 +127,6 @@ packages buffer."
 (defun pacman-package-list ()
   "Setup pacman package listing."
   (pacman-mode-dialog (current-buffer)
-    (set (make-local-variable 'pacman-selected-packages) nil)
     ;; (setq-local inhibit-read-only t)
     (setq-local widget-field-add-space nil)
     (erase-buffer)
@@ -148,9 +148,10 @@ Click on Cancel or type `q' to cancel.\n\n")
                    :parent type
                    :value nil
                    :format " %{%v%} %t\n    %d"
-                   :tag (format "%s %s %s"
+                   :tag (format "%s %s %s %s"
                                 (pacman--pkg-name item)
                                 (pacman--pkg-version item)
+                                (pacman--pkg-group item)
                                 (pacman--pkg-installed item))
                    :doc (pacman--pkg-description item)
                    :package (pacman--pkg-name item)
@@ -182,14 +183,26 @@ Click on Cancel or type `q' to cancel.\n\n")
   (interactive)
   (if pacman-selected-packages
       (progn
-        (msys-pacman 4 (mapconcat 'identity pacman-selected-packages " "))
-        (pacman-cancel)
+        (msys-pacman 4 (concat
+                        msys-pacman-install-command " "
+                        (mapconcat 'identity pacman-selected-packages " ")))
         (pop-to-buffer msys-pacman-install-buffer))
     (message "No packages selected for installation.")))
+
+(defun pacman-upgrade (&rest _ignore)
+  "Upgrade selected packages."
+  (interactive)
+  (if pacman-selected-packages
+      (progn
+        (msys-pacman 4 (concat
+                        msys-pacman-install-command " "
+                        (mapconcat 'identity pacman-selected-packages " ")))
+        (pop-to-buffer msys-pacman-install-buffer))))
 
 (defun pacman-cancel (&rest _ignore)
   "Kill the pacman buffer."
   (interactive)
+  (setq pacman-selected-packages nil)
   (kill-buffer (current-buffer))
   (message "Pacman output killed"))
 
@@ -198,16 +211,16 @@ Click on Cancel or type `q' to cancel.\n\n")
 ;;* Mode
 
 (defvar pacman-font-lock-vars
-  '(("\\(msys\\)\)?\\s-*\\([^ ]+\\)"
+  '(("\\(msys\\>\\)\)?\\s-*\\([^ ]+\\)"
      (1 'pacman-msys-face)
      (2 font-lock-constant-face))
-    ("\\(mingw32\\)\)?\\s-*\\([^ ]+\\)"
+    ("\\(mingw32\\>\\)\)?\\s-*\\([^ ]+\\)"
      (1 'pacman-mingw32-face)
      (2 font-lock-constant-face))
-    ("\\(mingw64\\)\)?\\s-*\\([^ ]+\\)"
+    ("\\(mingw64\\>\\)\)?\\s-*\\([^ ]+\\)"
      (1 'pacman-mingw64-face)
      (2 font-lock-constant-face))
-    ("\\[\\(installed\\)\\]" . 'msys-installed-face)))
+    ("\\[\\(installed\\).*\\]" 1 'msys-installed-face)))
 
 (defun pacman-font-lock (packages)
   (let ((pkgs (regexp-opt (mapcar 'pacman--pkg-name packages)))
@@ -220,6 +233,7 @@ Click on Cancel or type `q' to cancel.\n\n")
 (defvar pacman-menu
   '("Pacman"
     ["Install" pacman-install :help "Install selected packages"]
+    ["Upgrade" pacman-upgrade]
     ["Show installed (Occur)" pacman-installed :help "Occur installed packages"]
     ["Cancel" pacman-cancel]))
 
@@ -232,6 +246,7 @@ Click on Cancel or type `q' to cancel.\n\n")
     (define-key km "i" 'pacman-install)
     (define-key km "o" 'pacman-installed)
     (define-key km "q" 'pacman-cancel)
+    (define-key km "u" 'pacman-upgrade)
     km)
   "Keymap for pacman mode.")
 
@@ -242,7 +257,7 @@ Commands:
 \\{pacman-mode-map}"
   :syntax-table nil
   :abbrev-table nil
-  (set (make-local-variable 'pacman-packages) (pacman-get-packages))
+  (setq-local pacman-packages (pacman-get-packages))
   (setq truncate-lines t)
   (setq-local font-lock-defaults
               `(,(pacman-font-lock pacman-packages) nil nil nil nil)))
